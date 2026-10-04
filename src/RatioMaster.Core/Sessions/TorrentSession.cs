@@ -685,6 +685,8 @@ namespace RatioMaster.Core.Sessions
                     return $"leechers < {stop.Value:0}";
                 case StopConditionType.UploadedAboveMb when this.uploaded > (long)(stop.Value * 1024 * 1024):
                     return $"uploaded > {stop.Value:0} MB";
+                case StopConditionType.TorrentSize when stop.Value > 0 && this.uploaded >= (long)(this.descriptor.TotalLength * stop.Value):
+                    return $"uploaded {stop.Value}× torrent size";
                 case StopConditionType.DownloadedAboveMb when this.downloaded > (long)(stop.Value * 1024 * 1024):
                     return $"downloaded > {stop.Value:0} MB";
                 case StopConditionType.LeecherSeederRatioBelow when this.seeders is { } sd and > 0 && this.leechers is { } lc && lc / (double)sd < stop.Value:

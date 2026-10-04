@@ -11,7 +11,7 @@ namespace RatioMaster.Core.Tests.Clients
         public void LoadsAllProfilesFromTheBuiltInCatalog()
         {
             // 41 inherited from 0.43, minus the obsolete emulations dropped since (ten uTorrent 1.x-3.2, two
-            // Transmission, three Deluge), plus qBittorrent 5.2.3, 5.1.4 and 4.6.7, uTorrent 3.6.0 and 3.5.5,
+            // Transmission, three Deluge), plus qBittorrent 5.2.4, 5.1.4 and 4.6.7, uTorrent 3.6.0 and 3.5.5,
             // Transmission 2.94 and 3.00, Deluge 2.1.1.
             Assert.Equal(28, Catalog.Profiles.Count);
         }
@@ -26,8 +26,8 @@ namespace RatioMaster.Core.Tests.Clients
         [Fact]
         public void DefaultIsTheCurrentQBittorrent()
         {
-            Assert.Equal("qBittorrent 5.2.3", Catalog.DefaultName);
-            Assert.Equal("qBittorrent 5.2.3", Catalog.Default.Name);
+            Assert.Equal("qBittorrent 5.2.4", Catalog.DefaultName);
+            Assert.Equal("qBittorrent 5.2.4", Catalog.Default.Name);
             Assert.Equal(TorrentSettings.DefaultClientName, Catalog.DefaultName);
         }
 
@@ -43,7 +43,7 @@ namespace RatioMaster.Core.Tests.Clients
         }
 
         [Theory]
-        [InlineData("qBittorrent", new[] { "5.2.3", "5.1.4", "4.6.7" })]
+        [InlineData("qBittorrent", new[] { "5.2.4", "5.1.4", "4.6.7" })]
         [InlineData("uTorrent", new[] { "3.6.0", "3.5.5", "3.5.4" })]
         [InlineData("BitComet", new[] { "1.20", "1.03", "0.98", "0.96", "0.93", "0.92" })]
         [InlineData("Vuze", new[] { "5.7.5.0" })]
@@ -128,9 +128,9 @@ namespace RatioMaster.Core.Tests.Clients
         {
             // Derived from libtorrent RC_2_0: http_tracker_connection.cpp builds the query,
             // http_connection.cpp the headers, generate_fingerprint the peer id prefix.
-            var p = Catalog.GetByName("qBittorrent 5.2.3");
+            var p = Catalog.GetByName("qBittorrent 5.2.4");
 
-            Assert.Equal("-qB5230-", p.PeerIdPrefix);
+            Assert.Equal("-qB5240-", p.PeerIdPrefix);
             Assert.Equal(RandomValueKind.UrlSafe, p.PeerId.Type);
             Assert.Equal(12, p.PeerId.Length);
             Assert.False(p.PeerId.UrlEncode);
@@ -139,7 +139,7 @@ namespace RatioMaster.Core.Tests.Clients
             Assert.Equal(8, p.Key.Length);
             Assert.True(p.Key.UpperCase);
             Assert.Equal(
-                ["Host: {host}", "User-Agent: qBittorrent/5.2.3", "Accept-Encoding: gzip", "Connection: close"],
+                ["Host: {host}", "User-Agent: qBittorrent/5.2.4", "Accept-Encoding: gzip", "Connection: close"],
                 p.Headers);
             Assert.EndsWith("&compact=1&no_peer_id=1&supportcrypto=1&redundant=0", p.Query, StringComparison.Ordinal);
             Assert.Null(p.MemoryScan);
@@ -240,7 +240,7 @@ namespace RatioMaster.Core.Tests.Clients
                 Assert.Contains("MyClient", catalog.Families);
 
                 // Default still resolves.
-                Assert.Equal("qBittorrent 5.2.3", catalog.DefaultName);
+                Assert.Equal("qBittorrent 5.2.4", catalog.DefaultName);
             }
             finally
             {
@@ -264,7 +264,7 @@ namespace RatioMaster.Core.Tests.Clients
 
                 Assert.NotNull(error);
                 Assert.Equal(Catalog.Profiles.Count, catalog.Profiles.Count);
-                Assert.Equal("qBittorrent 5.2.3", catalog.DefaultName);
+                Assert.Equal("qBittorrent 5.2.4", catalog.DefaultName);
             }
             finally
             {

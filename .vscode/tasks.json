@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "rid",
+      "type": "pickString",
+      "description": "Target runtime",
+      "options": ["win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64"],
+      "default": "win-x64"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "src/RatioMaster.App/RatioMaster.App.csproj"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "publish single EXE",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "src/RatioMaster.App/RatioMaster.App.csproj",
+        "-c", "Release",
+        "-r", "${input:rid}",
+        "-o", "publish/${input:rid}"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

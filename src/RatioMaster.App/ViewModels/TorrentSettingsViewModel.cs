@@ -181,7 +181,7 @@ namespace RatioMaster.App.ViewModels
         {
             StopConditionType.AfterSeconds => "seconds",
             StopConditionType.UploadedAboveMb or StopConditionType.DownloadedAboveMb => "MB",
-            StopConditionType.LeecherSeederRatioBelow => "ratio",
+            StopConditionType.LeecherSeederRatioBelow or StopConditionType.TorrentSize => "ratio",
             _ => string.Empty,
         };
 
@@ -285,6 +285,7 @@ namespace RatioMaster.App.ViewModels
             StopConditionType.SeedersBelow or StopConditionType.LeechersBelow => 10,
             StopConditionType.UploadedAboveMb or StopConditionType.DownloadedAboveMb => 1024,
             StopConditionType.LeecherSeederRatioBelow => 1.0,
+            StopConditionType.TorrentSize => 2.0,
             _ => 0,
         };
 

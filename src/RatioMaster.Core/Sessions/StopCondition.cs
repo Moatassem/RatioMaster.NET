@@ -10,6 +10,7 @@ namespace RatioMaster.Core.Sessions
         SeedersBelow,
         LeechersBelow,
         UploadedAboveMb,
+        TorrentSize,
         DownloadedAboveMb,
         LeecherSeederRatioBelow,
     }

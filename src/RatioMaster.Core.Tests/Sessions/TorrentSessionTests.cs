@@ -364,6 +364,25 @@ namespace RatioMaster.Core.Tests.Sessions
         }
 
         [Fact]
+        public async Task StopsWhenUploadedReachesTorrentSizeTimesRatio()
+        {
+            var settings = QuietSettings() with
+            {
+                UploadRateBytes = 1024 * 1024,
+                Stop = new StopCondition { Type = StopConditionType.TorrentSize, Value = 2 },
+            };
+            var (session, _) = Create(settings, totalLength: 1024 * 1024);
+            await session.StartAsync(Ct);
+
+            await TickAsync(session, 1);
+            Assert.NotEqual(TorrentSessionState.Stopped, session.State);
+
+            await TickAsync(session, 1);
+            Assert.Equal(TorrentSessionState.Stopped, session.State);
+            Assert.Contains("torrent size", session.Snapshot.StopReason, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task StopsWhenLeecherToSeederRatioIsBelowTheLimit()
         {
             var settings = QuietSettings() with { Stop = new StopCondition { Type = StopConditionType.LeecherSeederRatioBelow, Value = 0.5 } };

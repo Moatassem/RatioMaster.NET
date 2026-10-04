@@ -169,6 +169,7 @@ namespace RatioMaster.App.ViewModels
             StopConditionType.SeedersBelow => $"Seeders < {this.settings.Stop.Value:0}",
             StopConditionType.LeechersBelow => $"Leechers < {this.settings.Stop.Value:0}",
             StopConditionType.UploadedAboveMb => $"Uploaded > {this.settings.Stop.Value:0} MB",
+            StopConditionType.TorrentSize => $"Uploaded ≥ {this.settings.Stop.Value}× size",
             StopConditionType.DownloadedAboveMb => $"Downloaded > {this.settings.Stop.Value:0} MB",
             _ => $"Leechers/seeders < {this.settings.Stop.Value}",
         };

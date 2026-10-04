@@ -100,7 +100,7 @@ namespace RatioMaster.Core.Tests.Settings
             Assert.True(new TorrentSettings().StopUploadWhenNoLeechers);
 
             // Session files written by 1.0 do not have the property: the safe default applies to them.
-            var fromOldFile = System.Text.Json.JsonSerializer.Deserialize("""{ "clientName": "qBittorrent 5.2.3" }""", CoreJsonContext.Default.TorrentSettings)!;
+            var fromOldFile = System.Text.Json.JsonSerializer.Deserialize("""{ "clientName": "qBittorrent 5.2.4" }""", CoreJsonContext.Default.TorrentSettings)!;
             Assert.True(fromOldFile.StopUploadWhenNoLeechers);
 
             var switchedOff = System.Text.Json.JsonSerializer.Deserialize("""{ "stopUploadWhenNoLeechers": false }""", CoreJsonContext.Default.TorrentSettings)!;

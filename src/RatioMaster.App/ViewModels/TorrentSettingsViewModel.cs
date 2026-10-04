@@ -279,13 +279,19 @@ namespace RatioMaster.App.ViewModels
             },
         };
 
+        internal static double RandomDouble(double min, double max)
+        {
+            var sz = min + (Random.Shared.NextDouble() * (max - min));
+            return Math.Round(sz, 1);
+        }
+
         private static double DefaultStopValue(StopConditionType type) => type switch
         {
             StopConditionType.AfterSeconds => 3600,
             StopConditionType.SeedersBelow or StopConditionType.LeechersBelow => 10,
             StopConditionType.UploadedAboveMb or StopConditionType.DownloadedAboveMb => 1024,
             StopConditionType.LeecherSeederRatioBelow => 1.0,
-            StopConditionType.TorrentSize => 2.0,
+            StopConditionType.TorrentSize => RandomDouble(1.2, 3.3),
             _ => 0,
         };
 

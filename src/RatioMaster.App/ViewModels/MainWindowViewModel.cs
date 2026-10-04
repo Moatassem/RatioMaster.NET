@@ -183,6 +183,11 @@ namespace RatioMaster.App.ViewModels
             }
 
             var editor = new TorrentSettingsViewModel(this.factory.Catalog, this.factory, this.settings.DefaultTorrentSettings);
+            if (editor.StopType == StopConditionType.TorrentSize)
+            {
+                editor.StopValue = TorrentSettingsViewModel.RandomDouble(1.2, 3.3);
+            }
+
             var dialog = new AddTorrentViewModel(editor, this.files, this.settings.DefaultTorrentSettings, this.settings.StartTorrentsImmediately);
             dialog.AddFiles(paths);
 
@@ -271,6 +276,11 @@ namespace RatioMaster.App.ViewModels
         /// </summary>
         private static Task StopAllOfAsync(IEnumerable<TorrentItemViewModel> torrents) =>
             Task.WhenAll(torrents.Where(t => t.IsRunning).Select(t => t.StopAsync()));
+
+        /// <summary>Rolls a fresh multiplier so each newly added torrent gets its own value instead of copying the default's.</summary>
+        private static TorrentSettings RandomizeTorrentSizeStop(TorrentSettings settings) => settings.Stop.Type == StopConditionType.TorrentSize
+            ? settings with { Stop = settings.Stop with { Value = TorrentSettingsViewModel.RandomDouble(1.2, 3.3) } }
+            : settings;
 
         private void Tick()
         {
@@ -372,7 +382,7 @@ namespace RatioMaster.App.ViewModels
                 try
                 {
                     var file = TorrentFile.Load(path);
-                    var item = this.CreateItem(TorrentDescriptor.FromFile(file), this.settings.DefaultTorrentSettings, file.Name);
+                    var item = this.CreateItem(TorrentDescriptor.FromFile(file), RandomizeTorrentSizeStop(this.settings.DefaultTorrentSettings), file.Name);
                     this.Torrents.Add(item);
                     if (this.settings.StartTorrentsImmediately)
                     {

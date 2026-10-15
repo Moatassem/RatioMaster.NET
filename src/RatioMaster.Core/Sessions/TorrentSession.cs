@@ -6,6 +6,7 @@ namespace RatioMaster.Core.Sessions
     using RatioMaster.Core.Clients;
     using RatioMaster.Core.Logging;
     using RatioMaster.Core.Networking;
+    using RatioMaster.Core.Resources;
     using RatioMaster.Core.Tracker;
 
     /// <summary>
@@ -221,7 +222,7 @@ namespace RatioMaster.Core.Sessions
                 pausedNow = this.UploadPaused;
             }
 
-            this.LogPauseChange(pausedBefore, pausedNow, "the pause on no leechers was switched off");
+            this.LogPauseChange(pausedBefore, pausedNow, Strings.ResumeReasonPauseSwitchedOff);
         }
 
         public async ValueTask DisposeAsync()
@@ -339,13 +340,16 @@ namespace RatioMaster.Core.Sessions
 
         private static int ClampInterval(int seconds) => Math.Clamp(seconds, MinIntervalSeconds, MaxIntervalSeconds);
 
-        private static string DescribeEvent(TrackerEvent trackerEvent) => trackerEvent switch
+        private static string AnnouncingText(TrackerEvent trackerEvent) => trackerEvent switch
         {
-            TrackerEvent.Started => "started event",
-            TrackerEvent.Stopped => "stopped event",
-            TrackerEvent.Completed => "completed event",
-            _ => "update",
+            TrackerEvent.Started => Strings.LogAnnouncingStarted,
+            TrackerEvent.Stopped => Strings.LogAnnouncingStopped,
+            TrackerEvent.Completed => Strings.LogAnnouncingCompleted,
+            _ => Strings.LogAnnouncingUpdate,
         };
+
+        /// <summary>Formats a stop-condition threshold the way the user typed it: whole numbers without decimals.</summary>
+        private static string Threshold(double value, string format = "0") => value.ToString(format, CultureInfo.CurrentCulture);
 
         private async Task RunAsync(CancellationToken cancellationToken)
         {
@@ -371,8 +375,8 @@ namespace RatioMaster.Core.Sessions
             {
                 // Nothing may leave the loop dead while the session still looks like it is running: report the
                 // failure the way a tracker error is reported, so the user sees it and can start again.
-                this.Log(LogLevel.Error, $"Unexpected error: {ex.Message}");
-                await this.StopWithReasonAsync($"unexpected error: {ex.Message}", isError: true, CancellationToken.None).ConfigureAwait(false);
+                this.Log(LogLevel.Error, string.Format(CultureInfo.CurrentCulture, Strings.LogUnexpectedError, ex.Message));
+                await this.StopWithReasonAsync(string.Format(CultureInfo.CurrentCulture, Strings.StopReasonUnexpectedError, ex.Message), isError: true, CancellationToken.None).ConfigureAwait(false);
             }
             finally
             {
@@ -501,6 +505,17 @@ namespace RatioMaster.Core.Sessions
             return true;
         }
 
+        /// <summary>
+        /// Gets the numwant for the next announce: the identity's, unless that is still the client's own default and
+        /// the client asks for fewer peers once it seeds (<see cref="ClientProfile.SeedingNumWant"/>). Call it inside the gate.
+        /// </summary>
+        private string CurrentNumWant() =>
+            this.left == 0
+            && this.profile.SeedingNumWant is { } seeding
+            && this.identity.NumWant == this.profile.DefaultNumWant.ToString(CultureInfo.InvariantCulture)
+                ? seeding.ToString(CultureInfo.InvariantCulture)
+                : this.identity.NumWant;
+
         private AnnounceValues BuildAnnounceValues()
         {
             bool keyRolled;
@@ -518,14 +533,14 @@ namespace RatioMaster.Core.Sessions
 
                 values = new AnnounceValues
                 {
-                    InfoHashEncoded = InfoHashEncoder.Encode(this.descriptor.InfoHash, this.profile.HashUpperCase),
+                    InfoHashEncoded = InfoHashEncoder.Encode(this.descriptor.InfoHash, this.profile.HashUpperCase, this.profile.Unreserved),
                     PeerId = this.identity.PeerId,
                     Port = this.identity.Port,
                     Uploaded = this.uploaded,
                     Downloaded = this.downloaded,
                     Left = this.left,
                     Key = this.identity.Key,
-                    NumWant = this.identity.NumWant,
+                    NumWant = this.CurrentNumWant(),
                     LocalIp = this.LocalIp,
                 };
             }
@@ -533,7 +548,7 @@ namespace RatioMaster.Core.Sessions
             // Outside the gate: the log event runs whatever a subscriber hooked up to it.
             if (keyRolled)
             {
-                this.Log(LogLevel.Info, "Generated a new tracker key, as the emulated client does.");
+                this.Log(LogLevel.Info, Strings.LogNewTrackerKey);
             }
 
             return values;
@@ -547,7 +562,7 @@ namespace RatioMaster.Core.Sessions
             }
 
             var values = this.BuildAnnounceValues();
-            this.Log(LogLevel.Info, $"Announcing {DescribeEvent(trackerEvent)} to tracker");
+            this.Log(LogLevel.Info, AnnouncingText(trackerEvent));
             try
             {
                 var outcome = await this.tracker.AnnounceAsync(
@@ -558,7 +573,7 @@ namespace RatioMaster.Core.Sessions
             }
             catch (Exception ex) when (ex is TrackerException or IOException or ProxyException)
             {
-                this.Log(LogLevel.Warning, $"No connection to tracker: {ex.Message}");
+                this.Log(LogLevel.Warning, string.Format(CultureInfo.CurrentCulture, Strings.LogNoConnection, ex.Message));
                 this.ScheduleRetry();
                 return null;
             }
@@ -572,14 +587,14 @@ namespace RatioMaster.Core.Sessions
                 this.elapsedInInterval = Math.Max(this.elapsedInInterval, this.currentInterval - RetryDelaySeconds);
             }
 
-            this.Log(LogLevel.Info, $"Will retry in {RetryDelaySeconds} seconds.");
+            this.Log(LogLevel.Info, string.Format(CultureInfo.CurrentCulture, Strings.LogWillRetry, RetryDelaySeconds));
         }
 
         private void ApplyAnnounceResponse(AnnounceResponse response)
         {
             if (response.HasFailure)
             {
-                this.Log(LogLevel.Error, $"Tracker error: {response.FailureReason}");
+                this.Log(LogLevel.Error, string.Format(CultureInfo.CurrentCulture, Strings.LogTrackerError, response.FailureReason));
                 return;
             }
 
@@ -606,7 +621,7 @@ namespace RatioMaster.Core.Sessions
             this.haveInitialPeers = true;
             if (response.Peers.Count > 0)
             {
-                this.Log(LogLevel.Info, $"peers: ({response.Peers.Count})");
+                this.Log(LogLevel.Info, string.Format(CultureInfo.CurrentCulture, Strings.LogPeers, response.Peers.Count));
             }
         }
 
@@ -617,7 +632,7 @@ namespace RatioMaster.Core.Sessions
                 return;
             }
 
-            var encoded = InfoHashEncoder.Encode(this.descriptor.InfoHash, this.profile.HashUpperCase);
+            var encoded = InfoHashEncoder.Encode(this.descriptor.InfoHash, this.profile.HashUpperCase, this.profile.Unreserved);
             try
             {
                 var outcome = await this.tracker.ScrapeAsync(
@@ -631,7 +646,7 @@ namespace RatioMaster.Core.Sessions
             }
             catch (Exception ex) when (ex is TrackerException or IOException or ProxyException)
             {
-                this.Log(LogLevel.Warning, $"Scrape error: {ex.Message}");
+                this.Log(LogLevel.Warning, string.Format(CultureInfo.CurrentCulture, Strings.LogScrapeError, ex.Message));
             }
         }
 
@@ -646,18 +661,18 @@ namespace RatioMaster.Core.Sessions
                 pausedNow = this.UploadPaused;
             }
 
-            this.LogPauseChange(pausedBefore, pausedNow, $"the tracker reports {incomplete} leechers");
+            this.LogPauseChange(pausedBefore, pausedNow, string.Format(CultureInfo.CurrentCulture, Strings.ResumeReasonLeechers, incomplete));
         }
 
         private void LogPauseChange(bool pausedBefore, bool pausedNow, string resumeReason)
         {
             if (pausedNow && !pausedBefore)
             {
-                this.Log(LogLevel.Info, "The tracker reports no leechers; upload paused until it reports some.");
+                this.Log(LogLevel.Info, Strings.LogUploadPausedNoLeechers);
             }
             else if (!pausedNow && pausedBefore)
             {
-                this.Log(LogLevel.Info, $"Upload resumed: {resumeReason}.");
+                this.Log(LogLevel.Info, string.Format(CultureInfo.CurrentCulture, Strings.LogUploadResumed, resumeReason));
             }
         }
 
@@ -665,7 +680,7 @@ namespace RatioMaster.Core.Sessions
         {
             if (response is { HasFailure: true } && !this.settings.IgnoreFailureReason)
             {
-                await this.StopWithReasonAsync($"Tracker error: {response.FailureReason}", isError: true, cancellationToken).ConfigureAwait(false);
+                await this.StopWithReasonAsync(string.Format(CultureInfo.CurrentCulture, Strings.LogTrackerError, response.FailureReason), isError: true, cancellationToken).ConfigureAwait(false);
                 return true;
             }
 
@@ -678,19 +693,19 @@ namespace RatioMaster.Core.Sessions
             switch (stop.Type)
             {
                 case StopConditionType.AfterSeconds when stop.Value > 0 && this.totalRunningSeconds >= stop.Value:
-                    return $"ran for {stop.Value:0} seconds";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonRanFor, Threshold(stop.Value));
                 case StopConditionType.SeedersBelow when this.seeders is { } s && s < stop.Value:
-                    return $"seeders < {stop.Value:0}";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonSeedersBelow, Threshold(stop.Value));
                 case StopConditionType.LeechersBelow when this.leechers is { } l && l < stop.Value:
-                    return $"leechers < {stop.Value:0}";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonLeechersBelow, Threshold(stop.Value));
                 case StopConditionType.UploadedAboveMb when this.uploaded > (long)(stop.Value * 1024 * 1024):
-                    return $"uploaded > {stop.Value:0} MB";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonUploadedAbove, Threshold(stop.Value));
                 case StopConditionType.TorrentSize when stop.Value > 0 && this.uploaded >= (long)(this.descriptor.TotalLength * stop.Value):
-                    return $"uploaded {stop.Value}× torrent size";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonTorrentSize, Threshold(stop.Value, "0.###"));
                 case StopConditionType.DownloadedAboveMb when this.downloaded > (long)(stop.Value * 1024 * 1024):
-                    return $"downloaded > {stop.Value:0} MB";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonDownloadedAbove, Threshold(stop.Value));
                 case StopConditionType.LeecherSeederRatioBelow when this.seeders is { } sd and > 0 && this.leechers is { } lc && lc / (double)sd < stop.Value:
-                    return $"leechers/seeders < {stop.Value}";
+                    return string.Format(CultureInfo.CurrentCulture, Strings.StopReasonRatioBelow, Threshold(stop.Value, "0.###"));
                 default:
                     return null;
             }
@@ -718,7 +733,7 @@ namespace RatioMaster.Core.Sessions
 
             if (reason is not null)
             {
-                this.Log(isError ? LogLevel.Error : LogLevel.Info, $"Stopped: {reason}");
+                this.Log(isError ? LogLevel.Error : LogLevel.Info, string.Format(CultureInfo.CurrentCulture, Strings.LogStopped, reason));
             }
 
             this.SetState(isError ? TorrentSessionState.Error : TorrentSessionState.Stopped);
@@ -736,7 +751,7 @@ namespace RatioMaster.Core.Sessions
             catch (Exception ex)
             {
                 // The stopped announce is best effort: whatever went wrong, the session still ends.
-                this.Log(LogLevel.Warning, $"Stopped announce failed: {ex.Message}");
+                this.Log(LogLevel.Warning, string.Format(CultureInfo.CurrentCulture, Strings.LogStoppedAnnounceFailed, ex.Message));
             }
         }
 

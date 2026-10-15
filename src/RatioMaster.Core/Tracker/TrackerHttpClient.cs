@@ -1,10 +1,12 @@
 namespace RatioMaster.Core.Tracker
 {
+    using System.Globalization;
     using System.Net.Sockets;
     using System.Security.Authentication;
 
     using RatioMaster.Core.Clients;
     using RatioMaster.Core.Networking;
+    using RatioMaster.Core.Resources;
 
     /// <summary>
     /// Sends a hand-built HTTP announce/scrape request over the tracker transport and parses the response,
@@ -36,6 +38,7 @@ namespace RatioMaster.Core.Tracker
             ArgumentNullException.ThrowIfNull(proxy);
 
             var uri = ParseUrl(url);
+            var target = HttpRequestWriter.RequestTarget(url.Trim());
             for (var redirect = 0; ; redirect++)
             {
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -43,12 +46,15 @@ namespace RatioMaster.Core.Tracker
                 TrackerResponse response;
                 try
                 {
-                    response = await this.SendOnceAsync(uri, profile, proxy, timeoutCts.Token).ConfigureAwait(false);
+                    response = await this.SendOnceAsync(uri, target, profile, proxy, timeoutCts.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
                     // Our own timeout, not the caller cancelling: report it like any other tracker failure.
-                    throw new TrackerException($"The tracker did not respond within {this.options.Timeout.TotalSeconds:0} seconds.");
+                    throw new TrackerException(string.Format(
+                        CultureInfo.CurrentCulture,
+                        Strings.TrackerNoResponse,
+                        this.options.Timeout.TotalSeconds.ToString("0", CultureInfo.CurrentCulture)));
                 }
 
                 // A redirect that cannot be followed (unparsable Location, or not http) is returned as it is.
@@ -57,12 +63,33 @@ namespace RatioMaster.Core.Tracker
                     && Uri.TryCreate(uri, response.Location, out var next)
                     && TrackerUrl.IsHttp(next))
                 {
+                    target = RedirectTarget(response.Location!, next);
                     uri = next;
                     continue;
                 }
 
                 return response;
             }
+        }
+
+        /// <summary>
+        /// Gets the request target after a redirect: the Location as the server wrote it when it is an absolute URL or
+        /// an absolute path, so its escapes survive as they did in the first request; the resolved path otherwise.
+        /// </summary>
+        private static string RedirectTarget(string location, Uri next)
+        {
+            location = location.Trim();
+            if (location.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || location.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                return HttpRequestWriter.RequestTarget(location);
+            }
+
+            if (location.StartsWith('/') && !location.StartsWith("//", StringComparison.Ordinal))
+            {
+                return HttpRequestWriter.RequestTarget(next.GetLeftPart(UriPartial.Authority) + location);
+            }
+
+            return next.PathAndQuery;
         }
 
         private static Uri ParseUrl(string url)
@@ -102,20 +129,20 @@ namespace RatioMaster.Core.Tracker
             return output.ToArray();
         }
 
-        private async Task<TrackerResponse> SendOnceAsync(Uri uri, ClientProfile profile, ProxySettings proxy, CancellationToken cancellationToken)
+        private async Task<TrackerResponse> SendOnceAsync(Uri uri, string target, ClientProfile profile, ProxySettings proxy, CancellationToken cancellationToken)
         {
             var useTls = string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase);
             var stream = await this.ConnectWithRetryAsync(uri, useTls, proxy, cancellationToken).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
             {
-                var request = HttpRequestWriter.BuildRequest(uri.PathAndQuery, uri.Host, profile);
+                var request = HttpRequestWriter.BuildRequest(target, HttpRequestWriter.HostHeader(uri, profile.HostPort), profile);
                 await stream.WriteAsync(request, cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
                 var body = await ReadResponseAsync(stream, cancellationToken).ConfigureAwait(false);
                 if (body.Length == 0)
                 {
-                    throw new TrackerException("The tracker response was empty.");
+                    throw new TrackerException(Strings.TrackerEmptyResponse);
                 }
 
                 return TrackerResponse.Parse(body);
@@ -137,8 +164,7 @@ namespace RatioMaster.Core.Tracker
                 {
                     // The connection worked but the certificate was refused; another attempt cannot change that.
                     throw new TrackerException(
-                        $"The TLS certificate of {uri.Host} is not trusted: {ex.Message} " +
-                        "Turn on \"Ignore TLS certificate errors\" in the torrent settings if you trust this tracker.",
+                        string.Format(CultureInfo.CurrentCulture, Strings.TrackerCertificateNotTrusted, uri.Host, ex.Message),
                         ex);
                 }
                 catch (Exception ex) when (ex is SocketException or IOException or ProxyException)
@@ -148,7 +174,8 @@ namespace RatioMaster.Core.Tracker
             }
 
             throw new TrackerException(
-                $"Could not connect to {uri.Host}:{uri.Port} after {this.options.ConnectAttempts} attempts.", lastError!);
+                string.Format(CultureInfo.CurrentCulture, Strings.TrackerConnectFailed, uri.Host, uri.Port, this.options.ConnectAttempts),
+                lastError!);
         }
     }
 }

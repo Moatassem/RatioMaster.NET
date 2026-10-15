@@ -98,6 +98,43 @@ namespace RatioMaster.Core.Tests.Clients
             Assert.Equal(0, suffix.Sum(c => pool.IndexOf(c, StringComparison.Ordinal)) % 36);
         }
 
+        /// <summary>
+        /// uTorrent 3.6.0.47254 and BitTorrent 7.11.0.47255 end their peer id with the first two bytes of the SHA-1 of
+        /// the eighteen bytes before it, the build included, so a tracker can tell theirs from random bytes.
+        /// </summary>
+        [Theory]
+        [InlineData("uTorrent 3.6.0", "-UT360S-", 47254)]
+        [InlineData("BitTorrent 7.11.0 (47255)", "-BT7b0S-", 47255)]
+        public void UTorrentPeerIdEndsWithItsSha1CheckBytes(string name, string prefix, int build)
+        {
+            var profile = ClientProfileCatalog.Load().GetByName(name);
+            var generator = new ClientIdentityGenerator(new DeterministicRandomSource(47254));
+
+            for (var i = 0; i < 500; i++)
+            {
+                var peerId = PercentEncoding.Decode(generator.Generate(profile).PeerId);
+
+                Assert.Equal(20, peerId.Length);
+                Assert.Equal(prefix, System.Text.Encoding.ASCII.GetString(peerId, 0, 8));
+                Assert.Equal(build, peerId[8] | (peerId[9] << 8));
+                Assert.DoesNotContain((byte)0, peerId[10..18]);
+                Assert.Equal(System.Security.Cryptography.SHA1.HashData(peerId.AsSpan(0, 18))[..2], peerId[18..]);
+            }
+        }
+
+        [Fact]
+        public void UTorrentChecksumHashesThePrefixItIsGiven()
+        {
+            // Same random bytes, different prefix: the check bytes have to follow the prefix, not just the tail.
+            var spec = new RandomValueSpec { Type = RandomValueKind.UTorrentChecksum, Length = 10 };
+            var a = new ClientIdentityGenerator(new DeterministicRandomSource(5)).GenerateValue(spec, prefix: "-UT360S-%96%b8");
+            var b = new ClientIdentityGenerator(new DeterministicRandomSource(5)).GenerateValue(spec, prefix: "-BT7b0S-%97%b8");
+
+            Assert.Equal(10, a.Length);
+            Assert.Equal(a[..8], b[..8]);
+            Assert.NotEqual(a[8..], b[8..]);
+        }
+
         /// <summary>Transmission prints its key with "%x": lower case, no padding, so the length varies.</summary>
         [Fact]
         public void HexRangeKeyIsLowerCaseAndNeverZeroPadded()
@@ -119,6 +156,79 @@ namespace RatioMaster.Core.Tests.Clients
             }
         }
 
+        /// <summary>rTorrent prints random() + 1 with setw(8) and setfill('0'): eight lower-case digits, below 2^31 the first is 0-7.</summary>
+        [Fact]
+        public void HexRangeWithALengthIsZeroPaddedAndStaysBelowTwoToTheThirtyOne()
+        {
+            var generator = new ClientIdentityGenerator(new DeterministicRandomSource(8));
+            var spec = new RandomValueSpec { Type = RandomValueKind.HexRange, Length = 8 };
+
+            var keys = Enumerable.Range(0, 500).Select(_ => generator.GenerateValue(spec)).ToList();
+
+            Assert.All(keys, key =>
+            {
+                Assert.Equal(8, key.Length);
+                Assert.All(key, c => Assert.Contains(c, "0123456789abcdef"));
+                Assert.Contains(key[0], "01234567");
+            });
+            Assert.Contains(keys, key => key[0] == '0');
+        }
+
+        [Fact]
+        public void AnyByteKindCanProduceTheZeroByteThatRandomNeverDoes()
+        {
+            var generator = new ClientIdentityGenerator(new DeterministicRandomSource(6));
+            var anyByte = new RandomValueSpec { Type = RandomValueKind.AnyByte, Length = 12, UrlEncode = true, UpperCase = true };
+            var random = anyByte with { Type = RandomValueKind.Random };
+
+            var anyByteValues = Enumerable.Range(0, 500).Select(_ => generator.GenerateValue(anyByte)).ToList();
+            var randomValues = Enumerable.Range(0, 500).Select(_ => generator.GenerateValue(random)).ToList();
+
+            // rTorrent's generate_random takes whole bytes, so a NUL turns up; the 1-255 clients never send one.
+            Assert.Contains(anyByteValues, v => v.Contains("%00", StringComparison.Ordinal));
+            Assert.DoesNotContain(randomValues, v => v.Contains("%00", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void UInt16DecimalIsAnUnpaddedNumberUpTo65535()
+        {
+            var generator = new ClientIdentityGenerator(new DeterministicRandomSource(16));
+            var spec = new RandomValueSpec { Type = RandomValueKind.UInt16Decimal, Length = 5 };
+
+            var keys = Enumerable.Range(0, 2000).Select(_ => generator.GenerateValue(spec)).ToList();
+
+            Assert.All(keys, key =>
+            {
+                Assert.InRange(int.Parse(key, System.Globalization.CultureInfo.InvariantCulture), 0, 65535);
+                Assert.True(key == "0" || key[0] != '0', key);
+            });
+            Assert.Contains(keys, key => key.Length < 5);
+            Assert.Contains(keys, key => int.Parse(key, System.Globalization.CultureInfo.InvariantCulture) > 60000);
+        }
+
+        [Fact]
+        public void BitTornadoBase64UsesAllSixtyFourCharacters()
+        {
+            // BitTornado/__init__.py: mapbase64 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.-'
+            const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.-";
+            var generator = new ClientIdentityGenerator(new DeterministicRandomSource(3));
+            var spec = new RandomValueSpec { Type = RandomValueKind.BitTornadoBase64, Length = 11 };
+
+            var seen = new HashSet<char>();
+            for (var i = 0; i < 500; i++)
+            {
+                var value = generator.GenerateValue(spec);
+
+                Assert.Equal(11, value.Length);
+                Assert.All(value, c => Assert.Contains(c, alphabet));
+                seen.UnionWith(value);
+            }
+
+            // The two characters a plain alphanumeric value never has do turn up.
+            Assert.Contains('.', seen);
+            Assert.Contains('-', seen);
+        }
+
         [Fact]
         public void RandomKindPercentEncodesNonAlphanumericBytes()
         {
@@ -133,6 +243,42 @@ namespace RatioMaster.Core.Tests.Clients
             });
 
             Assert.Equal("A%00%ff%20", value);
+        }
+
+        [Fact]
+        public void PortComesFromTheClientsRangesWhenItHasThem()
+        {
+            var vuze = ClientProfileCatalog.Load().GetByName("Vuze 5.7.6.0");
+            var generator = new ClientIdentityGenerator(new DeterministicRandomSource(12));
+
+            var ports = Enumerable.Range(0, 2000).Select(_ => int.Parse(generator.Generate(vuze).Port, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+
+            Assert.All(ports, port => Assert.InRange(port, 10000, 65535));
+            Assert.DoesNotContain(ports, port => port is >= 45100 and <= 45110);
+            Assert.Contains(ports, port => port < 20000);
+            Assert.Contains(ports, port => port > 60000);
+        }
+
+        [Theory]
+        [InlineData("10000-45099,45111-65535", "10000-45099 45111-65535")]
+        [InlineData(" 6881 - 6999 ", "6881-6999")]
+        [InlineData("51413-51413", "51413-51413")]
+        [InlineData("0-10,10-5,abc,70000-70001,-5,1-2-3", "")]
+        [InlineData("", "")]
+        public void PortRangesParseOnlyValidRanges(string text, string expected)
+        {
+            Assert.Equal(expected, string.Join(' ', PortRange.ParseList(text).Select(r => $"{r.Min}-{r.Max}")));
+        }
+
+        [Fact]
+        public void RandomKindLeavesTheClientsUnreservedBytesUnescaped()
+        {
+            // uTorrent keeps -._~ in its peer id, so a random byte that happens to be one of them goes out as is.
+            var generator = new ClientIdentityGenerator(new ScriptedRandomSource(ints: [0x2D, 0x7E, 0x2A, (int)'A']));
+
+            var value = generator.GenerateValue(new RandomValueSpec { Type = RandomValueKind.Random, Length = 4, UrlEncode = true }, "-._~");
+
+            Assert.Equal("-~%2aA", value);
         }
 
         [Fact]
@@ -169,12 +315,12 @@ namespace RatioMaster.Core.Tests.Clients
 
             var identity = generator.Generate(profile);
 
-            Assert.StartsWith("-UT360S-%ec%b6", identity.PeerId, StringComparison.Ordinal);
+            Assert.StartsWith("-UT360S-%96%b8", identity.PeerId, StringComparison.Ordinal);
             Assert.Equal(8, identity.Key.Length);
             Assert.Equal("200", identity.NumWant);
             Assert.Equal(ClientIdentitySource.Generated, identity.Source);
             var port = int.Parse(identity.Port);
-            Assert.InRange(port, 1025, 65534);
+            Assert.InRange(port, 10000, 64999);
         }
 
         [Fact]

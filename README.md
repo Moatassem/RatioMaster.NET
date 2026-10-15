@@ -3,7 +3,7 @@ RatioMaster.NET
 
 RatioMaster.NET fakes the upload and download figures a BitTorrent tracker sees for a torrent. It does
 not download or upload any data and it does not need a BitTorrent client running: it talks to the
-tracker directly, pretending to be one of 28 real client versions.
+tracker directly, pretending to be one of 32 real client versions.
 
 Version 1.0 is a full rewrite on .NET 10 with an [Avalonia](https://avaloniaui.net) interface. It runs
 on Windows, Linux and macOS as a single self-contained file, so there is nothing to install.
@@ -18,10 +18,21 @@ Grab the archive for your system from the [latest release](https://github.com/Ni
 | Linux (x64, arm64) | `RatioMaster.NET-linux-x64.tar.gz` | Needs `libfontconfig1`, `libx11-6`, `libice6`, `libsm6`. |
 | macOS 12+ (Intel, Apple silicon) | `RatioMaster.NET-osx-arm64.zip` | Unsigned: run `xattr -dr com.apple.quarantine RatioMaster.NET.app` once. |
 
+### Arch Linux
+
+Install [`ratiomaster.net-bin`](https://aur.archlinux.org/packages/ratiomaster.net-bin) from the
+[AUR](https://wiki.archlinux.org/title/Arch_User_Repository) with your preferred helper:
+
+```
+yay -S ratiomaster.net-bin
+# or
+paru -S ratiomaster.net-bin
+```
+
 ## What it does
 
 - Runs any number of torrents at once, each with its own client emulation and speeds.
-- Emulates 28 client versions across 17 families: qBittorrent, uTorrent, BitComet, Vuze, BitTorrent, rTorrent,
+- Emulates 32 client versions across 17 families: qBittorrent, uTorrent, BitComet, Vuze, BitTorrent, rTorrent,
   Transmission, ABC, BitLord, BTuga, BitTornado, Burst, BitTyrant, BitSpirit, Deluge, KTorrent and Gnome BT.
   Each emulation is checked against the real client's own source code.
 - Copies the peer id, key, port and peer count out of a running client's memory when that client
@@ -37,6 +48,8 @@ Grab the archive for your system from the [latest release](https://github.com/Ni
   `https` trackers.
 - Keeps a per-torrent log and a record of every tracker exchange.
 - Saves and loads sessions, and restores the last one on startup. Session files written by 0.43 still load.
+- Speaks 38 languages. It starts in the display language of the system; Settings > General > Language
+  picks another one.
 
 ## Building from source
 
@@ -67,6 +80,14 @@ The 0.43 WinForms sources were removed in 1.0. They remain in the git history at
 need them. The emulations they defined are preserved byte for byte in
 `src/RatioMaster.Core.Tests/Tracker/RequestGoldens.txt`, which pins the exact request every client
 emulation sends; changing it changes how a tracker fingerprints your traffic.
+
+## Translations
+
+The interface texts are in `src/RatioMaster.App/Resources/Strings.resx` and the engine's messages (log
+lines, errors) in `src/RatioMaster.Core/Resources/Strings.resx`, both in English, with each translation in
+a `Strings.<language>.resx` next to them. Tests check that every translation has every text and keeps its
+`{0}` placeholders. To improve a translation, edit its two `.resx` files. To add a language, add both files,
+its entry in `src/RatioMaster.Core/Settings/UiLanguages.cs` and its code in `build/packaging/Info.plist`.
 
 ## Adding a client emulation
 

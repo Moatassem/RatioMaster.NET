@@ -1,6 +1,7 @@
 namespace RatioMaster.Core.Clients
 {
     using System.Globalization;
+    using System.Security.Cryptography;
     using System.Text;
 
     using RatioMaster.Core.Abstractions;
@@ -20,6 +21,9 @@ namespace RatioMaster.Core.Clients
 
         /// <summary>Transmission's peer id pool, from tr_peerIdInit.</summary>
         private const string Base36 = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+        /// <summary>BitTornado's mapbase64, from BitTornado/__init__.py and BT1/Rerequester.py.</summary>
+        private const string MapBase64 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.-";
         private const int MinPort = 1025;
         private const int MaxPort = 65535;
 
@@ -36,31 +40,64 @@ namespace RatioMaster.Core.Clients
             ArgumentNullException.ThrowIfNull(profile);
             return new ClientIdentity
             {
-                PeerId = profile.PeerIdPrefix + this.GenerateValue(profile.PeerId),
+                PeerId = profile.PeerIdPrefix + this.GenerateValue(profile.PeerId, profile.Unreserved, profile.PeerIdPrefix),
                 Key = this.GenerateValue(profile.Key),
-                Port = this.random.Next(MinPort, MaxPort).ToString(CultureInfo.InvariantCulture),
+                Port = this.GeneratePort(profile.PortRanges).ToString(CultureInfo.InvariantCulture),
                 NumWant = profile.DefaultNumWant.ToString(CultureInfo.InvariantCulture),
                 Source = ClientIdentitySource.Generated,
             };
         }
 
-        /// <summary>Generates one random value from a spec (the peer id suffix or the key).</summary>
-        public string GenerateValue(RandomValueSpec spec)
+        /// <summary>
+        /// Generates one random value from a spec (the peer id suffix or the key). A value the spec says to
+        /// percent-encode keeps letters, digits and the client's <paramref name="unreserved"/> characters as they are.
+        /// <paramref name="prefix"/> is the percent-encoded peer id prefix the value follows, which
+        /// <see cref="RandomValueKind.UTorrentChecksum"/> hashes.
+        /// </summary>
+        public string GenerateValue(RandomValueSpec spec, string unreserved = "", string prefix = "")
         {
             ArgumentNullException.ThrowIfNull(spec);
+            ArgumentNullException.ThrowIfNull(prefix);
             var value = spec.Type switch
             {
                 RandomValueKind.TransmissionChecksum => this.GenerateTransmissionSuffix(spec.Length),
-                RandomValueKind.HexRange => this.GenerateHexRange(),
+                RandomValueKind.UTorrentChecksum => this.GenerateUTorrentSuffix(spec.Length, prefix),
+                RandomValueKind.HexRange => this.GenerateHexRange(spec.Length),
+                RandomValueKind.UInt16Decimal => this.random.Next(0, 65536).ToString(CultureInfo.InvariantCulture),
                 _ => this.GenerateBase(spec.Type, spec.Length),
             };
 
             if (spec.UrlEncode)
             {
-                return PercentEncoding.Encode(value, spec.UpperCase);
+                return PercentEncoding.Encode(value, spec.UpperCase, unreserved);
             }
 
             return spec.UpperCase ? value.ToUpperInvariant() : value;
+        }
+
+        /// <summary>
+        /// Picks a listen port uniformly from the client's ranges, which is what a client that draws from a range and
+        /// re-draws the ports it skips ends up with; without ranges, from the old 1025-65534.
+        /// </summary>
+        private int GeneratePort(IReadOnlyList<PortRange> ranges)
+        {
+            if (ranges.Count == 0)
+            {
+                return this.random.Next(MinPort, MaxPort);
+            }
+
+            var index = this.random.Next(ranges.Sum(r => r.Count));
+            foreach (var range in ranges)
+            {
+                if (index < range.Count)
+                {
+                    return range.Min + index;
+                }
+
+                index -= range.Count;
+            }
+
+            return ranges[^1].Max;
         }
 
         private string GenerateBase(RandomValueKind kind, int length)
@@ -73,7 +110,9 @@ namespace RatioMaster.Core.Clients
                     RandomValueKind.Numeric => this.Pick(Digits),
                     RandomValueKind.Hex => this.Pick(HexDigits),
                     RandomValueKind.UrlSafe => this.Pick(UrlSafe),
+                    RandomValueKind.BitTornadoBase64 => this.Pick(MapBase64),
                     RandomValueKind.Random => (char)this.random.Next(1, 256),
+                    RandomValueKind.AnyByte => (char)this.random.Next(0, 256),
                     _ => this.Pick(Alphanumeric),
                 });
             }
@@ -103,9 +142,29 @@ namespace RatioMaster.Core.Clients
             return new string(buffer);
         }
 
-        /// <summary>Transmission's announce key: tr_rand_int(INT_MAX) printed with "%x".</summary>
-        private string GenerateHexRange() =>
-            Convert.ToString(this.random.Next(int.MaxValue), 16);
+        /// <summary>
+        /// Builds a uTorrent peer id tail: random bytes 1..255, then the first two bytes of the SHA-1 of the peer id
+        /// so far, the decoded <paramref name="prefix"/> followed by those random bytes. uTorrent 3.6.0.47254 and
+        /// BitTorrent 7.11.0.47255 fill bytes 10-17 of their peer id this way and hash bytes 0-17 into bytes 18-19.
+        /// </summary>
+        private string GenerateUTorrentSuffix(int length, string prefix)
+        {
+            var tail = new byte[Math.Max(length - 2, 0)];
+            for (var i = 0; i < tail.Length; i++)
+            {
+                tail[i] = (byte)this.random.Next(1, 256);
+            }
+
+            var hash = SHA1.HashData([.. PercentEncoding.Decode(prefix), .. tail]);
+            return Encoding.Latin1.GetString([.. tail, .. hash[..Math.Min(length, 2)]]);
+        }
+
+        /// <summary>
+        /// A 31-bit key in lower-case hex: Transmission's tr_rand_int(INT_MAX) printed with "%x" when
+        /// <paramref name="length"/> is 0, rTorrent's random() zero-padded to 8 digits when it is 8.
+        /// </summary>
+        private string GenerateHexRange(int length) =>
+            Convert.ToString(this.random.Next(int.MaxValue), 16).PadLeft(length, '0');
 
         private char Pick(string set) => set[(int)(set.Length * this.random.NextDouble())];
     }

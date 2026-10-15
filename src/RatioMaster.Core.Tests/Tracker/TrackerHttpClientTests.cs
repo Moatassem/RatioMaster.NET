@@ -29,6 +29,46 @@ namespace RatioMaster.Core.Tests.Tracker
         }
 
         [Fact]
+        public async Task SendsTheQueryWithTheEscapesItWasBuiltWith()
+        {
+            // The announce URL is percent-encoded by the client profile; the request line has to carry it unchanged.
+            await using var tracker = FakeTracker.Start(
+                FakeTracker.Redirect("/final?info_hash=%7E%2d"),
+                FakeTracker.BencodeResponse(AnnounceBody()));
+            var client = new TrackerHttpClient();
+
+            await client.GetAsync($"{tracker.BaseUrl}/announce?info_hash=%2D%2E%5F%7E%2A", Profile, ProxySettings.None, Timeout);
+
+            Assert.StartsWith("GET /announce?info_hash=%2D%2E%5F%7E%2A HTTP/1.1\r\n", tracker.Requests.First(), StringComparison.Ordinal);
+            Assert.StartsWith("GET /final?info_hash=%7E%2d HTTP/1.1\r\n", tracker.Requests.Last(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task SendsTheTrackersPortInTheHostHeader()
+        {
+            // The fake tracker listens on a random port, never 80, so a real client writes it into Host.
+            await using var tracker = FakeTracker.Start(FakeTracker.BencodeResponse(AnnounceBody()));
+            var client = new TrackerHttpClient();
+            var authority = new Uri(tracker.BaseUrl).Authority;
+
+            await client.GetAsync($"{tracker.BaseUrl}/announce", Profile, ProxySettings.None, Timeout);
+
+            Assert.Contains($"\r\nHost: {authority}\r\n", tracker.Requests.First(), StringComparison.Ordinal);
+            Assert.Contains(":", authority, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task LeavesThePortOutOfHostForBitComet()
+        {
+            await using var tracker = FakeTracker.Start(FakeTracker.BencodeResponse(AnnounceBody()));
+            var bitComet = ClientProfileCatalog.Load().GetByName("BitComet 2.22");
+
+            await new TrackerHttpClient().GetAsync($"{tracker.BaseUrl}/announce", bitComet, ProxySettings.None, Timeout);
+
+            Assert.Contains("\r\nHost: 127.0.0.1\r\n", tracker.Requests.First(), StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task FollowsRedirects()
         {
             // A relative Location resolves against the request URI, so both hits land on this tracker.

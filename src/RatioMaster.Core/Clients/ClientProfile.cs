@@ -21,6 +21,13 @@ namespace RatioMaster.Core.Clients
         /// <summary>Gets a value indicating whether the percent-encoded info hash uses upper-case hex escapes.</summary>
         public bool HashUpperCase { get; init; }
 
+        /// <summary>
+        /// Gets the characters other than ASCII letters and digits that the client leaves as they are when it
+        /// percent-encodes the info hash and the peer id: "-_.!~*()" for libtorrent, "-._~" for uTorrent and
+        /// Transmission, "-" for rTorrent and so on. Empty means every other byte is escaped.
+        /// </summary>
+        public string Unreserved { get; init; } = string.Empty;
+
         /// <summary>Gets the spec for the tracker "key" value.</summary>
         public required RandomValueSpec Key { get; init; }
 
@@ -39,11 +46,41 @@ namespace RatioMaster.Core.Clients
         /// <summary>Gets the request header lines in order, with "{host}" where the host goes. No CRLFs.</summary>
         public required IReadOnlyList<string> Headers { get; init; }
 
+        /// <summary>
+        /// Gets a value indicating whether {host} carries the tracker's port when it is not the scheme's default, as
+        /// HTTP asks and libtorrent, curl, Java and Python do. BitComet's own HTTP code writes the host alone.
+        /// </summary>
+        public bool HostPort { get; init; } = true;
+
+        /// <summary>
+        /// Gets a value indicating whether the stopped announce keeps the usual numwant. Most clients ask for no peers
+        /// on the way out; BitComet works its numwant out the same way for every event.
+        /// </summary>
+        public bool KeepNumWantOnStop { get; init; }
+
+        /// <summary>
+        /// Gets a value indicating whether the started announce keeps "&amp;natmapped=1&amp;localip=". The emulations
+        /// inherited from 0.43 leave it out of the first announce; BitComet 2.22 sends it every time.
+        /// </summary>
+        public bool LocalIpOnStart { get; init; }
+
         /// <summary>Gets the announce query template with {infohash} {peerid} {port} {uploaded} {downloaded} {left} {event} {numwant} {key} {localip} placeholders.</summary>
         public required string Query { get; init; }
 
         /// <summary>Gets the default value for numwant.</summary>
         public int DefaultNumWant { get; init; } = 200;
+
+        /// <summary>
+        /// Gets the numwant the client sends once it seeds, when that is not <see cref="DefaultNumWant"/>. Vuze asks for
+        /// half again as many peers as it has free connection slots, and its connection limit halves for a seed.
+        /// </summary>
+        public int? SeedingNumWant { get; init; }
+
+        /// <summary>
+        /// Gets the ranges the client draws its listen port from on a fresh install, or an empty list for the old
+        /// 1025-65534. Vuze, for example, picks 10000-65535 but skips its magnet ports, 45100-45110.
+        /// </summary>
+        public IReadOnlyList<PortRange> PortRanges { get; init; } = [];
 
         /// <summary>Gets the memory-scan location, or null when this client cannot be parsed from a running process.</summary>
         public ClientMemoryScanSpec? MemoryScan { get; init; }

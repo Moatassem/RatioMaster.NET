@@ -36,7 +36,7 @@ namespace RatioMaster.Core.Tests.Sessions
             Assert.Equal("KEY12345", values.Key);
             Assert.Equal("200", values.NumWant);
             Assert.Equal("1.2.3.4", values.LocalIp);
-            Assert.Equal(InfoHashEncoder.Encode(InfoHash, upperCase: false), values.InfoHashEncoded);
+            Assert.Equal(InfoHashEncoder.Encode(InfoHash, Profile.HashUpperCase, Profile.Unreserved), values.InfoHashEncoded);
             Assert.Equal(1, tracker.ScrapeCount);
             Assert.Equal(TorrentSessionState.Downloading, session.State);
             Assert.Equal(10, session.Snapshot.Seeders);
@@ -649,6 +649,32 @@ namespace RatioMaster.Core.Tests.Sessions
             Assert.All(tracker.Announces, a => Assert.Equal("KEY12345", a.Values.Key));
         }
 
+        [Theory]
+        [InlineData(0, "75")]
+        [InlineData(100, "37")]
+        public async Task VuzeAsksForFewerPeersOnceItSeeds(double finishedPercent, string expected)
+        {
+            var vuze = ClientProfileCatalog.Load().GetByName("Vuze 5.7.6.0");
+            var settings = QuietSettings() with { FinishedPercent = finishedPercent };
+            var (session, tracker) = Create(settings, identity: Identity() with { NumWant = "75" }, profile: vuze);
+
+            await session.StartAsync(Ct);
+
+            Assert.Equal(expected, Assert.Single(tracker.Announces).Values.NumWant);
+        }
+
+        [Fact]
+        public async Task ANumWantTheUserChoseIsKeptWhileSeeding()
+        {
+            var vuze = ClientProfileCatalog.Load().GetByName("Vuze 5.7.6.0");
+            var settings = QuietSettings() with { FinishedPercent = 100 };
+            var (session, tracker) = Create(settings, identity: Identity() with { NumWant = "50" }, profile: vuze);
+
+            await session.StartAsync(Ct);
+
+            Assert.Equal("50", Assert.Single(tracker.Announces).Values.NumWant);
+        }
+
         private static ClientIdentity Identity(string port = "50000") => new()
         {
             PeerId = "-UT3320-abcdefghijkl",
@@ -672,7 +698,8 @@ namespace RatioMaster.Core.Tests.Sessions
             long totalLength = 1_000_000,
             IRandomSource? random = null,
             Action<FakeTrackerClient>? configureTracker = null,
-            ClientIdentity? identity = null)
+            ClientIdentity? identity = null,
+            ClientProfile? profile = null)
         {
             var tracker = new FakeTrackerClient();
             configureTracker?.Invoke(tracker);
@@ -685,7 +712,7 @@ namespace RatioMaster.Core.Tests.Sessions
             };
             var session = new TorrentSession(
                 descriptor,
-                Profile,
+                profile ?? Profile,
                 identity ?? Identity(),
                 settings ?? QuietSettings(),
                 tracker,

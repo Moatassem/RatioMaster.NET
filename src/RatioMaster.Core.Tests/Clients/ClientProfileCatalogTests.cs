@@ -11,11 +11,11 @@ namespace RatioMaster.Core.Tests.Clients
         public void LoadsAllProfilesFromTheBuiltInCatalog()
         {
             // 41 inherited from 0.43, minus the obsolete emulations dropped since (ten uTorrent 1.x-3.2, two
-            // Transmission, three Deluge), plus qBittorrent 5.2.3, 5.1.4 and 4.6.7, uTorrent 3.6.0, Transmission 2.94
+            // Transmission, three Deluge), plus qBittorrent 5.1.4 and 4.6.7, uTorrent 3.6.0, Transmission 2.94
             // and 3.00, Deluge 2.1.1; then qBittorrent 5.2.4, Deluge 2.2.0, BitTornado 0.3.18, rTorrent 0.16.25,
             // Vuze 5.7.6.0, BitComet 2.22 and BitTorrent 7.11.0 for 1.2, which dropped uTorrent 3.5.5 and 3.5.4 and
             // BitTorrent 7.10.3 because their code could not be checked.
-            Assert.Equal(32, Catalog.Profiles.Count);
+            Assert.Equal(31, Catalog.Profiles.Count);
         }
 
         [Fact]
@@ -45,7 +45,7 @@ namespace RatioMaster.Core.Tests.Clients
         }
 
         [Theory]
-        [InlineData("qBittorrent", new[] { "5.2.4", "5.2.3", "5.1.4", "4.6.7" })]
+        [InlineData("qBittorrent", new[] { "5.2.4", "5.1.4", "4.6.7" })]
         [InlineData("uTorrent", new[] { "3.6.0" })]
         [InlineData("BitComet", new[] { "2.22", "1.20", "1.03", "0.98", "0.96", "0.93", "0.92" })]
         [InlineData("Vuze", new[] { "5.7.6.0", "5.7.5.0" })]
@@ -130,7 +130,6 @@ namespace RatioMaster.Core.Tests.Clients
 
         [Theory]
         [InlineData("5.2.4", "-qB5240-")]
-        [InlineData("5.2.3", "-qB5230-")]
         [InlineData("5.1.4", "-qB5140-")]
         [InlineData("4.6.7", "-qB4670-")]
         public void QBittorrentMatchesLibtorrentsAnnounce(string version, string prefix)
@@ -376,7 +375,7 @@ namespace RatioMaster.Core.Tests.Clients
             try
             {
                 var catalog = ClientProfileCatalog.Load(path);
-                Assert.Equal(33, catalog.Profiles.Count);
+                Assert.Equal(32, catalog.Profiles.Count);
                 Assert.Equal("-XX0000-", catalog.GetByName("uTorrent 3.6.0").PeerIdPrefix);
                 Assert.Equal(99, catalog.GetByName("uTorrent 3.6.0").DefaultNumWant);
                 Assert.True(catalog.Contains("MyClient 1.0"));

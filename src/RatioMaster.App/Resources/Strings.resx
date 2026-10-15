@@ -399,6 +399,10 @@
     <value>When uploaded &gt;</value>
     <comment>"Stop" drop-down: followed by a number box and "MB".</comment>
   </data>
+  <data name="StopTypeTorrentSize" xml:space="preserve">
+    <value>When uploaded ≥ torrent size ×</value>
+    <comment>"Stop" drop-down: followed by a number box (multiple of the torrent size) and "ratio".</comment>
+  </data>
   <data name="StopTypeDownloadedAboveMb" xml:space="preserve">
     <value>When downloaded &gt;</value>
     <comment>"Stop" drop-down: followed by a number box and "MB".</comment>

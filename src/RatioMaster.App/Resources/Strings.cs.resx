@@ -309,6 +309,9 @@
   <data name="StopTypeUploadedAboveMb" xml:space="preserve">
     <value>Po odeslání &gt;</value>
   </data>
+  <data name="StopTypeTorrentSize" xml:space="preserve">
+    <value>When uploaded ≥ torrent size ×</value>
+  </data>
   <data name="StopTypeDownloadedAboveMb" xml:space="preserve">
     <value>Po stažení &gt;</value>
   </data>

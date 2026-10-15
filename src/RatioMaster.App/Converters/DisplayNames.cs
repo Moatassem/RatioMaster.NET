@@ -36,6 +36,7 @@ namespace RatioMaster.App.Converters
             StopConditionType.SeedersBelow => Strings.StopTypeSeedersBelow,
             StopConditionType.LeechersBelow => Strings.StopTypeLeechersBelow,
             StopConditionType.UploadedAboveMb => Strings.StopTypeUploadedAboveMb,
+            StopConditionType.TorrentSize => Strings.StopTypeTorrentSize,
             StopConditionType.DownloadedAboveMb => Strings.StopTypeDownloadedAboveMb,
             StopConditionType.LeecherSeederRatioBelow => Strings.StopTypeLeecherSeederRatioBelow,
             _ => Strings.StopTypeNever,

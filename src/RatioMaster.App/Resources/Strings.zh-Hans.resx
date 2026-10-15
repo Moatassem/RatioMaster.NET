@@ -309,6 +309,9 @@
   <data name="StopTypeUploadedAboveMb" xml:space="preserve">
     <value>已上传 &gt;</value>
   </data>
+  <data name="StopTypeTorrentSize" xml:space="preserve">
+    <value>When uploaded ≥ torrent size ×</value>
+  </data>
   <data name="StopTypeDownloadedAboveMb" xml:space="preserve">
     <value>已下载 &gt;</value>
   </data>

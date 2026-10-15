@@ -10,9 +10,9 @@ namespace RatioMaster.Core.Sessions
         SeedersBelow,
         LeechersBelow,
         UploadedAboveMb,
-        TorrentSize,
         DownloadedAboveMb,
         LeecherSeederRatioBelow,
+        TorrentSize,
     }
 
     /// <summary>An auto-stop condition.</summary>
